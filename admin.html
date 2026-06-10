@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>WifeyLuck — Admin Panel</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+
+  <!-- Firebase SDK v9 compat -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+  <style>
+    /* =============================================
+       DESIGN TOKENS
+       ============================================= */
+    :root {
+      --bg:        #0F1117;
+      --surface:   #1A1D27;
+      --surface2:  #232736;
+      --surface3:  #2C3148;
+      --accent:    #7C6DFA;        /* violet — admin identity */
+      --accent2:   #E84393;        /* magenta highlight */
+      --success:   #22C55E;
+      --warning:   #F59E0B;
+      --danger:    #EF4444;
+      --text:      #F1F0FB;
+      --muted:     #8B8FA8;
+      --border:    rgba(124,109,250,0.2);
+
+      --font: 'Inter', system-ui, sans-serif;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* =============================================
+       LOGIN SCREEN
+       ============================================= */
+    #loginScreen {
+      position: fixed; inset: 0; z-index: 1000;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 0 60px rgba(124,109,250,0.15);
+    }
+
+    .login-logo {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+
+    .login-sub {
+      color: var(--muted);
+      margin-bottom: 32px;
+      font-size: 0.9rem;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+
+    input[type="email"],
+    input[type="password"],
+    input[type="text"],
+    input[type="number"],
+    select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 0.9rem;
+      padding: 10px 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(124,109,250,0.15);
+    }
+
+    .login-error {
+      color: var(--danger);
+      font-size: 0.85rem;
+      margin-top: 12px;
+      display: none;
+    }
+
+    /* =============================================
+       BUTTONS
+       ============================================= */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 10px 18px;
+      border-radius: var(--radius-sm);
+      font-family: var(--font);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover:not(:disabled) { background: #6a5ce8; }
+
+    .btn-success {
+      background: var(--success);
+      color: #fff;
+    }
+    .btn-success:hover:not(:disabled) { background: #16a34a; }
+
+    .btn-danger {
+      background: transparent;
+      color: var(--danger);
+      border: 1px solid var(--danger);
+    }
+    .btn-danger:hover:not(:disabled) { background: rgba(239,68,68,0.1); }
+
+    .btn-ghost {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover:not(:disabled) { background: var(--surface3); }
+
+    .btn-full { width: 100%; justify-content: center; padding: 12px; }
+
+    /* =============================================
+       LAYOUT: SIDEBAR + CONTENT
+       ============================================= */
+    #adminApp { display: none; min-height: 100vh; }
+
+    .admin-layout {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 240px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: sticky; top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-logo {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.01em;
+    }
+
+    .sidebar-subtitle {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .sidebar-nav {
+      padding: 12px 12px;
+      flex: 1;
+    }
+
+    .nav-section-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      padding: 8px 8px 6px;
+    }
+
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: background 0.15s, color 0.15s;
+      margin-bottom: 2px;
+      user-select: none;
+    }
+
+    .nav-item:hover { background: var(--surface2); color: var(--text); }
+    .nav-item.active { background: rgba(124,109,250,0.15); color: var(--accent); }
+
+    .nav-item .nav-icon { font-size: 1rem; }
+
+    .sidebar-footer {
+      padding: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* Main content */
+    .main-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: clamp(20px, 3vw, 36px);
+      max-width: 960px;
+    }
+
+    /* =============================================
+       PANELS / TABS
+       ============================================= */
+    .panel-section { display: none; }
+    .panel-section.active { display: block; }
+
+    .page-title {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+    }
+
+    .page-subtitle {
+      color: var(--muted);
+      margin-bottom: 28px;
+      font-size: 0.875rem;
+    }
+
+    /* =============================================
+       CARDS
+       ============================================= */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-bottom: 16px;
+    }
+
+    .card-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* =============================================
+       STAT BADGES
+       ============================================= */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+    }
+
+    .stat-label { font-size: 0.75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
+    .stat-value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; }
+
+    /* =============================================
+       TOAST NOTIFICATIONS
+       ============================================= */
+    #toastContainer {
+      position: fixed;
+      top: 20px; right: 20px;
+      display: flex; flex-direction: column; gap: 8px;
+      z-index: 9999;
+    }
+
+    .toast {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      display: flex; align-items: center; gap: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      animation: toastIn 0.2s ease;
+      max-width: 320px;
+    }
+
+    .toast.success { border-color: rgba(34,197,94,0.4); color: var(--success); }
+    .toast.error   { border-color: rgba(239,68,68,0.4);  color: var(--danger); }
+    .toast.info    { border-color: rgba(124,109,250,0.4); color: var(--accent); }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* =============================================
+       SEGMENT ROW
+       ============================================= */
+    .segment-row {
+      display: grid;
+      grid-template-columns: 40px 1fr 1fr auto auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .segment-row:last-child { border-bottom: none; }
+
+    .segment-num {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--surface2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .color-swatch {
+      width: 32px; height: 32px;
+      border-radius: 6px;
+      border: 2px solid rgba(255,255,255,0.1);
+      cursor: pointer;
+    }
+
+    /* Forced slot selector */
+    .slot-options {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .slot-option {
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 4px;
+      text-align: center;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .slot-option:hover { border-color: var(--accent); background: rgba(124,109,250,0.1); }
+    .slot-option.selected { border-color: var(--accent); background: rgba(124,109,250,0.2); color: var(--accent); }
+
+    /* =============================================
+       CARD ROWS
+       ============================================= */
+    .card-row {
+      display: grid;
+      grid-template-columns: 40px 1fr 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .card-row:last-child { border-bottom: none; }
+
+    /* =============================================
+       REFERRAL
+       ============================================= */
+    .referral-code-preview {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: var(--accent2);
+      font-family: 'Courier New', monospace;
+      padding: 16px;
+      background: var(--surface2);
+      border-radius: var(--radius-sm);
+      border: 2px dashed rgba(232,67,147,0.4);
+      text-align: center;
+      margin: 12px 0;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .toggle-label { font-size: 0.9rem; font-weight: 500; }
+    .toggle-desc  { font-size: 0.8rem; color: var(--muted); }
+
+    /* Custom toggle switch */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px; height: 24px;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch-slider {
+      position: absolute; cursor: pointer;
+      inset: 0;
+      background: var(--surface3);
+      border-radius: 24px;
+      transition: 0.3s;
+    }
+    .switch-slider::before {
+      content: '';
+      position: absolute;
+      width: 18px; height: 18px;
+      left: 3px; bottom: 3px;
+      background: var(--muted);
+      border-radius: 50%;
+      transition: 0.3s;
+    }
+    .switch input:checked + .switch-slider { background: var(--accent); }
+    .switch input:checked + .switch-slider::before {
+      transform: translateX(20px);
+      background: #fff;
+    }
+
+    /* =============================================
+       RESPONSIVE
+       ============================================= */
+    @media (max-width: 720px) {
+      .sidebar { display: none; }
+      .main-content { padding: 16px; }
+      .segment-row { grid-template-columns: 32px 1fr auto; }
+      .segment-row .color-swatch { display: none; }
+      .card-row { grid-template-columns: 30px 1fr auto; }
+      .slot-options { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    /* Divider */
+    .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+    /* Inline flex helpers */
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+
+  <!-- ===================== TOAST CONTAINER ===================== -->
+  <div id="toastContainer"></div>
+
+  <!-- ===================== LOGIN SCREEN ===================== -->
+  <div id="loginScreen">
+    <div class="login-card">
+      <div class="login-logo">🔐 WifeyLuck Admin</div>
+      <div class="login-sub">Secure Admin Dashboard</div>
+
+      <div class="form-group">
+        <label for="loginEmail">Email</label>
+        <input type="email" id="loginEmail" placeholder="Enter admin email" />
+      </div>
+      <div class="form-group">
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" placeholder="Enter password"
+               onkeydown="if(event.key==='Enter') doLogin()" />
+      </div>
+      <div class="login-error" id="loginError">Invalid email or password.</div>
+
+      <button class="btn btn-primary btn-full" style="margin-top:20px;" onclick="doLogin()">
+        Sign In →
+      </button>
+    </div>
+  </div>
+
+  <!-- ===================== ADMIN APP ===================== -->
+  <div id="adminApp">
+    <div class="admin-layout">
+
+      <!-- SIDEBAR -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-logo">WifeyLuck ✨</div>
+          <div class="sidebar-subtitle">Admin Dashboard</div>
+        </div>
+
+        <nav class="sidebar-nav">
+          <div class="nav-section-label">Overview</div>
+          <div class="nav-item active" onclick="showSection('dashboard')">
+            <span class="nav-icon">📊</span> Dashboard
+          </div>
+
+          <div class="nav-section-label" style="margin-top:12px;">Games</div>
+          <div class="nav-item" onclick="showSection('spinWheel')">
+            <span class="nav-icon">🎡</span> Spin Wheel
+          </div>
+          <div class="nav-item" onclick="showSection('cardShuffle')">
+            <span class="nav-icon">🃏</span> Card Shuffle
+          </div>
+
+          <div class="nav-section-label" style="margin-top:12px;">Promotions</div>
+          <div class="nav-item" onclick="showSection('referral')">
+            <span class="nav-icon">🏷️</span> Referral Codes
+          </div>
+        </nav>
+
+        <div class="sidebar-footer">
+          <button class="btn btn-ghost" style="width:100%;justify-content:center;" onclick="doLogout()">
+            Sign Out
+          </button>
+        </div>
+      </aside>
+
+      <!-- MAIN -->
+      <main class="main-content">
+
+        <!-- ==================== DASHBOARD ==================== -->
+        <div class="panel-section active" id="section-dashboard">
+          <div class="page-title">Dashboard</div>
+          <div class="page-subtitle">Overview of all active configurations</div>
+
+          <div class="stats-row">
+            <div class="stat-card">
+              <div class="stat-label">Wheel Segments</div>
+              <div class="stat-value" id="stat-segments">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Cards Active</div>
+              <div class="stat-value" id="stat-cards">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Active Code</div>
+              <div class="stat-value" id="stat-code" style="font-size:1rem;letter-spacing:0.08em;">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Referral Discount</div>
+              <div class="stat-value" id="stat-discount">—</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">⚡ Quick Actions</div>
+            <div class="row">
+              <button class="btn btn-primary" onclick="showSection('spinWheel')">Edit Spin Wheel</button>
+              <button class="btn btn-primary" onclick="showSection('cardShuffle')">Edit Cards</button>
+              <button class="btn btn-primary" onclick="showSection('referral')">Manage Referral</button>
+              <a href="index.html" target="_blank" class="btn btn-ghost">View Public Site ↗</a>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">ℹ️ System Info</div>
+            <p style="color:var(--muted);font-size:0.875rem;line-height:1.8;">
+              All changes you make here are reflected <strong style="color:var(--text)">instantly</strong> on the public website via Firebase real-time sync.<br/>
+              The spin wheel result is fully controlled — set the forced slot to decide where the wheel lands for every spin.<br/>
+              Card discounts are revealed in shuffled order on the public site — but the values you set are always applied.<br/>
+              Referral codes can auto-regenerate every 24 hours, or you can push a manual code at any time.
+            </p>
+          </div>
+        </div>
+
+        <!-- ==================== SPIN WHEEL ==================== -->
+        <div class="panel-section" id="section-spinWheel">
+          <div class="page-title">Spin Wheel</div>
+          <div class="page-subtitle">Configure the 6 wheel segments and control the forced result</div>
+
+          <!-- Forced result control -->
+          <div class="card">
+            <div class="card-title">🎯 Forced Result Control</div>
+            <p style="color:var(--muted);font-size:0.875rem;margin-bottom:12px;">
+              Select which segment the wheel will always land on. Every user spin will land here.
+            </p>
+            <div class="slot-options" id="slotOptions">
+              <!-- Rendered by JS -->
+            </div>
+            <div style="margin-top:16px;">
+              <button class="btn btn-primary" onclick="saveForcedSlot()">💾 Save Forced Result</button>
+            </div>
+          </div>
+
+          <!-- Segments editor -->
+          <div class="card">
+            <div class="card-title">🎨 Segment Configuration</div>
+
+            <div id="segmentsEditor">
+              <!-- Rendered by JS -->
+            </div>
+
+            <div class="divider"></div>
+            <button class="btn btn-success" onclick="saveSegments()">💾 Save All Segments</button>
+          </div>
+        </div>
+
+        <!-- ==================== CARD SHUFFLE ==================== -->
+        <div class="panel-section" id="section-cardShuffle">
+          <div class="page-title">Card Shuffle</div>
+          <div class="page-subtitle">Add, edit, or remove cards and their discount values</div>
+
+          <div class="card">
+            <div class="card-title">🃏 Cards Editor</div>
+
+            <div id="cardsEditor">
+              <!-- Rendered by JS -->
+            </div>
+
+            <div class="divider"></div>
+            <div class="row">
+              <button class="btn btn-ghost" onclick="addCardRow()">+ Add Card</button>
+              <button class="btn btn-success" onclick="saveCards()">💾 Save All Cards</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================== REFERRAL CODES ==================== -->
+        <div class="panel-section" id="section-referral">
+          <div class="page-title">Referral Codes</div>
+          <div class="page-subtitle">Manage the active referral code and discount</div>
+
+          <!-- Current code display -->
+          <div class="card">
+            <div class="card-title">📋 Active Code</div>
+            <div class="referral-code-preview" id="adminCodePreview">—</div>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+              <span style="color:var(--muted);font-size:0.85rem;">Discount: </span>
+              <span id="adminCodeDiscount" style="font-weight:700;color:var(--accent2);">—</span>
+              <span style="color:var(--muted);font-size:0.85rem;margin-left:8px;">Expires: </span>
+              <span id="adminCodeExpiry" style="font-size:0.85rem;">—</span>
+            </div>
+          </div>
+
+          <!-- Auto / Manual toggle -->
+          <div class="card">
+            <div class="card-title">⚙️ Generation Mode</div>
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-label">Auto Mode (24-hour cycle)</div>
+                <div class="toggle-desc">A new code is automatically generated every 24 hours</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="autoModeToggle" onchange="toggleAutoMode()" />
+                <span class="switch-slider"></span>
+              </label>
+            </div>
+            <p style="color:var(--muted);font-size:0.8rem;margin-top:8px;">
+              When Auto Mode is <strong>on</strong>, codes regenerate automatically. Switch <strong>off</strong> to use only manual codes.
+            </p>
+          </div>
+
+          <!-- Manual code generator -->
+          <div class="card">
+            <div class="card-title">✏️ Manual Code Generator</div>
+            <div class="row" style="margin-bottom:12px;">
+              <div style="flex:1;min-width:160px;">
+                <label>Custom Code</label>
+                <input type="text" id="manualCodeInput" placeholder="e.g. SUMMER25"
+                       style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()" />
+              </div>
+              <div style="width:120px;">
+                <label>Discount (%)</label>
+                <input type="number" id="manualDiscountInput" placeholder="e.g. 20" min="1" max="100" />
+              </div>
+              <div style="align-self:flex-end;">
+                <button class="btn btn-ghost" onclick="generateRandomCode()">🎲 Random</button>
+              </div>
+            </div>
+            <div class="row">
+              <button class="btn btn-primary" onclick="publishManualCode()">🚀 Publish Code Now</button>
+            </div>
+          </div>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ===================== JAVASCRIPT ===================== -->
+  <script>
+    // ============================================================
+    //  FIREBASE INIT
+    // ============================================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyDbsmH93sK-KRzZfcvl7n6bO5tVtra3siY",
+      authDomain: "wifeyluck-cc9d4.firebaseapp.com",
+      projectId: "wifeyluck-cc9d4",
+      storageBucket: "wifeyluck-cc9d4.firebasestorage.app",
+      messagingSenderId: "355833295530",
+      appId: "1:355833295530:web:07f4171202e568e45896d3",
+      measurementId: "G-ZC734VNWGQ"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // ============================================================
+    //  AUTH
+    // ============================================================
+    const ADMIN_EMAIL    = 'theworldofcybersecurityy@proton.me';
+    const ADMIN_PASSWORD = '9955188086faiz';
+    let isLoggedIn = false;
+
+    function doLogin() {
+      const email = document.getElementById('loginEmail').value.trim();
+      const pass  = document.getElementById('loginPassword').value;
+
+      if (email === ADMIN_EMAIL && pass === ADMIN_PASSWORD) {
+        isLoggedIn = true;
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('adminApp').style.display    = 'block';
+        initAdmin();
+      } else {
+        document.getElementById('loginError').style.display = 'block';
+        document.getElementById('loginPassword').value = '';
+      }
+    }
+
+    function doLogout() {
+      isLoggedIn = false;
+      document.getElementById('adminApp').style.display    = 'none';
+      document.getElementById('loginScreen').style.display = 'flex';
+      document.getElementById('loginEmail').value          = '';
+      document.getElementById('loginPassword').value       = '';
+    }
+
+    // ============================================================
+    //  NAVIGATION
+    // ============================================================
+    function showSection(id) {
+      document.querySelectorAll('.panel-section').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      document.getElementById(`section-${id}`).classList.add('active');
+      // Activate sidebar item
+      document.querySelectorAll('.nav-item').forEach(item => {
+        if (item.getAttribute('onclick')?.includes(id)) item.classList.add('active');
+      });
+    }
+
+    // ============================================================
+    //  TOAST NOTIFICATIONS
+    // ============================================================
+    function showToast(msg, type = 'info') {
+      const icons = { success:'✅', error:'❌', info:'ℹ️' };
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.innerHTML = `<span>${icons[type]}</span> ${msg}`;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 3200);
+    }
+
+    // ============================================================
+    //  STATE
+    // ============================================================
+    const SEGMENT_COLORS = ['#E84393','#FFD166','#7B5EA7','#06D6A0','#EF476F','#118AB2'];
+
+    // Local editable state (before save)
+    let editSegments   = []; // [{label, value, color}] x6
+    let forcedSlot     = 0;
+    let editCards      = []; // [{id, label, discount}]
+    let referralLive   = {}; // current referral doc
+    let autoMode       = true;
+
+    // ============================================================
+    //  INIT: subscribe to Firestore
+    // ============================================================
+    function initAdmin() {
+      subscribeSpinWheel();
+      subscribeAdminSettings();
+      subscribeCards();
+      subscribeReferral();
+    }
+
+    /* ---------- SPIN WHEEL ---------- */
+    function subscribeSpinWheel() {
+      db.collection('spinWheel').orderBy('order').onSnapshot(snap => {
+        const segs = [];
+        snap.forEach(doc => {
+          const d = doc.data();
+          segs.push({ id: doc.id, label: d.label || '', value: d.value || '', color: d.color || SEGMENT_COLORS[segs.length] });
+        });
+
+        // Ensure exactly 6
+        editSegments = Array.from({ length: 6 }, (_, i) => segs[i] || {
+          id: null, label: `Segment ${i+1}`, value: `${(i+1)*5}% OFF`, color: SEGMENT_COLORS[i]
+        });
+
+        renderSegmentsEditor();
+        document.getElementById('stat-segments').textContent = editSegments.length;
+      });
+    }
+
+    function subscribeAdminSettings() {
+      db.collection('adminSettings').doc('spinControl').onSnapshot(doc => {
+        if (doc.exists) {
+          forcedSlot = doc.data().forcedSlot || 0;
+        }
+        renderSlotOptions();
+      });
+    }
+
+    function subscribeCards() {
+      db.collection('cardShuffle').orderBy('order').onSnapshot(snap => {
+        const cards = [];
+        snap.forEach(doc => {
+          const d = doc.data();
+          cards.push({ id: doc.id, label: d.label || `Card ${cards.length+1}`, discount: d.discount || '10% OFF' });
+        });
+        editCards = cards.length ? cards : [];
+        renderCardsEditor();
+        document.getElementById('stat-cards').textContent = editCards.length;
+      });
+    }
+
+    function subscribeReferral() {
+      db.collection('referralCodes').doc('active').onSnapshot(doc => {
+        if (doc.exists) {
+          referralLive = doc.data();
+        } else {
+          referralLive = { code: 'WIFEYLUCK10', discount: 10, mode: 'auto', expiresAt: null };
+        }
+        renderReferralPanel();
+      });
+    }
+
+    // ============================================================
+    //  SPIN WHEEL: RENDER
+    // ============================================================
+    function renderSegmentsEditor() {
+      const container = document.getElementById('segmentsEditor');
+      container.innerHTML = editSegments.map((seg, i) => `
+        <div class="segment-row">
+          <div class="segment-num" style="background:${seg.color}20;color:${seg.color}">${i+1}</div>
+          <div>
+            <input type="text" id="seg-label-${i}" value="${escHtml(seg.label)}" placeholder="Display label (e.g. 10% OFF)" />
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="color" class="color-swatch" id="seg-color-${i}" value="${seg.color}"
+                   title="Segment color" onchange="updateSegmentColor(${i})" />
+            <input type="text" id="seg-value-${i}" value="${escHtml(seg.value)}" placeholder="Value shown in modal" style="flex:1" />
+          </div>
+          <div style="font-size:0.75rem;color:var(--muted)">Slot ${i+1}</div>
+        </div>
+      `).join('');
+    }
+
+    function updateSegmentColor(i) {
+      editSegments[i].color = document.getElementById(`seg-color-${i}`).value;
+      renderSegmentsEditor();
+    }
+
+    function renderSlotOptions() {
+      const container = document.getElementById('slotOptions');
+      container.innerHTML = editSegments.map((seg, i) => `
+        <div class="slot-option ${i === forcedSlot ? 'selected' : ''}"
+             onclick="selectSlot(${i})">
+          <div style="font-size:0.7rem;color:var(--muted);margin-bottom:3px">Slot ${i+1}</div>
+          <div style="color:${seg.color};font-size:0.8rem">${escHtml(seg.label || seg.value || '?')}</div>
+        </div>
+      `).join('');
+    }
+
+    function selectSlot(i) {
+      forcedSlot = i;
+      renderSlotOptions();
+    }
+
+    async function saveForcedSlot() {
+      try {
+        await db.collection('adminSettings').doc('spinControl').set({ forcedSlot }, { merge: true });
+        showToast(`Forced slot set to Slot ${forcedSlot + 1}`, 'success');
+      } catch (e) {
+        showToast('Error saving: ' + e.message, 'error');
+      }
+    }
+
+    async function saveSegments() {
+      const batch = db.batch();
+      try {
+        editSegments.forEach((seg, i) => {
+          const label = document.getElementById(`seg-label-${i}`)?.value.trim() || seg.label;
+          const value = document.getElementById(`seg-value-${i}`)?.value.trim() || seg.value;
+          const color = document.getElementById(`seg-color-${i}`)?.value || seg.color;
+
+          // Use existing doc ID or create a new one
+          const ref = seg.id
+            ? db.collection('spinWheel').doc(seg.id)
+            : db.collection('spinWheel').doc(`slot_${i+1}`);
+
+          batch.set(ref, { label, value, color, order: i }, { merge: true });
+        });
+        await batch.commit();
+        showToast('Wheel segments saved!', 'success');
+      } catch (e) {
+        showToast('Error saving segments: ' + e.message, 'error');
+      }
+    }
+
+    // ============================================================
+    //  CARD SHUFFLE: RENDER
+    // ============================================================
+    function renderCardsEditor() {
+      const container = document.getElementById('cardsEditor');
+      if (!editCards.length) {
+        container.innerHTML = '<p style="color:var(--muted);padding:12px 0">No cards yet. Click "+ Add Card" to add one.</p>';
+        return;
+      }
+      container.innerHTML = editCards.map((card, i) => `
+        <div class="card-row" id="card-row-${i}">
+          <div class="segment-num">${i+1}</div>
+          <input type="text" id="card-label-${i}" value="${escHtml(card.label)}" placeholder="Card label" />
+          <input type="text" id="card-discount-${i}" value="${escHtml(card.discount)}" placeholder="e.g. 15% OFF" />
+          <button class="btn btn-danger" onclick="removeCardRow(${i})">✕</button>
+        </div>
+      `).join('');
+    }
+
+    function addCardRow() {
+      editCards.push({ id: null, label: `Card ${editCards.length + 1}`, discount: '10% OFF' });
+      renderCardsEditor();
+    }
+
+    function removeCardRow(i) {
+      const removed = editCards.splice(i, 1)[0];
+      // Delete from Firestore if it had an ID
+      if (removed.id) {
+        db.collection('cardShuffle').doc(removed.id).delete().catch(console.warn);
+      }
+      renderCardsEditor();
+    }
+
+    async function saveCards() {
+      const batch = db.batch();
+      try {
+        // Collect current values from inputs
+        editCards.forEach((card, i) => {
+          const label    = document.getElementById(`card-label-${i}`)?.value.trim()    || card.label;
+          const discount = document.getElementById(`card-discount-${i}`)?.value.trim() || card.discount;
+
+          const ref = card.id
+            ? db.collection('cardShuffle').doc(card.id)
+            : db.collection('cardShuffle').doc(`card_${Date.now()}_${i}`);
+
+          batch.set(ref, { label, discount, order: i }, { merge: true });
+        });
+        await batch.commit();
+        showToast('Cards saved!', 'success');
+      } catch (e) {
+        showToast('Error saving cards: ' + e.message, 'error');
+      }
+    }
+
+    // ============================================================
+    //  REFERRAL CODES: RENDER + ACTIONS
+    // ============================================================
+    function renderReferralPanel() {
+      document.getElementById('adminCodePreview').textContent  = referralLive.code     || '—';
+      document.getElementById('adminCodeDiscount').textContent = referralLive.discount != null ? `${referralLive.discount}%` : '—';
+      document.getElementById('stat-code').textContent         = referralLive.code     || '—';
+      document.getElementById('stat-discount').textContent     = referralLive.discount != null ? `${referralLive.discount}%` : '—';
+
+      // Expiry
+      const expiryEl = document.getElementById('adminCodeExpiry');
+      if (referralLive.expiresAt) {
+        const d = referralLive.expiresAt.toDate ? referralLive.expiresAt.toDate() : new Date(referralLive.expiresAt);
+        expiryEl.textContent = d.toLocaleString();
+      } else {
+        expiryEl.textContent = 'No expiry';
+      }
+
+      // Toggle
+      autoMode = referralLive.mode === 'auto';
+      const toggle = document.getElementById('autoModeToggle');
+      if (toggle) toggle.checked = autoMode;
+    }
+
+    function toggleAutoMode() {
+      autoMode = document.getElementById('autoModeToggle').checked;
+      const mode = autoMode ? 'auto' : 'manual';
+      db.collection('referralCodes').doc('active').set({ mode }, { merge: true })
+        .then(() => showToast(`Mode set to ${mode}`, 'success'))
+        .catch(e => showToast('Error: ' + e.message, 'error'));
+
+      if (autoMode) scheduleAutoRegen();
+    }
+
+    function generateRandomCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let code = 'WIFEY';
+      for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)];
+      document.getElementById('manualCodeInput').value = code;
+    }
+
+    async function publishManualCode() {
+      const code     = document.getElementById('manualCodeInput').value.trim().toUpperCase();
+      const discount = parseInt(document.getElementById('manualDiscountInput').value, 10);
+
+      if (!code)             return showToast('Enter a code first', 'error');
+      if (!discount || discount < 1 || discount > 100)
+                             return showToast('Discount must be 1–100%', 'error');
+
+      try {
+        const expiresAt = autoMode
+          ? firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 24 * 3600 * 1000))
+          : null;
+
+        await db.collection('referralCodes').doc('active').set({
+          code, discount, mode: autoMode ? 'auto' : 'manual', expiresAt
+        });
+
+        showToast(`Code "${code}" published!`, 'success');
+        document.getElementById('manualCodeInput').value    = '';
+        document.getElementById('manualDiscountInput').value = '';
+      } catch (e) {
+        showToast('Error publishing code: ' + e.message, 'error');
+      }
+    }
+
+    /** Auto-regen: only runs client-side while admin tab is open.
+     *  For production, use a Cloud Function or scheduled task. */
+    function scheduleAutoRegen() {
+      if (!autoMode) return;
+      const expiry = referralLive.expiresAt?.toDate
+        ? referralLive.expiresAt.toDate()
+        : (referralLive.expiresAt ? new Date(referralLive.expiresAt) : null);
+
+      if (!expiry || expiry <= new Date()) {
+        autoRegenCode();
+      } else {
+        const delay = expiry - Date.now();
+        setTimeout(() => { if (autoMode) autoRegenCode(); }, delay);
+      }
+    }
+
+    async function autoRegenCode() {
+      const chars    = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let code = 'WIFEY';
+      for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)];
+      const discount = referralLive.discount || 10;
+      const expiresAt = firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 24 * 3600 * 1000));
+
+      try {
+        await db.collection('referralCodes').doc('active').set({ code, discount, mode: 'auto', expiresAt });
+        showToast(`Auto-regenerated new code: ${code}`, 'info');
+        scheduleAutoRegen();
+      } catch (e) {
+        console.warn('Auto-regen failed:', e);
+      }
+    }
+
+    // ============================================================
+    //  UTILITIES
+    // ============================================================
+    function escHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;');
+    }
+
+    // ============================================================
+    //  SEED FIRESTORE WITH DEFAULTS (only if collections are empty)
+    // ============================================================
+    async function seedDefaults() {
+      // Seed spin wheel
+      const spinSnap = await db.collection('spinWheel').limit(1).get();
+      if (spinSnap.empty) {
+        const batch = db.batch();
+        const defaults = [
+          { label:'5% OFF',  value:'5% OFF',  color:'#E84393', order:0 },
+          { label:'10% OFF', value:'10% OFF', color:'#FFD166', order:1 },
+          { label:'15% OFF', value:'15% OFF', color:'#7B5EA7', order:2 },
+          { label:'20% OFF', value:'20% OFF', color:'#06D6A0', order:3 },
+          { label:'25% OFF', value:'25% OFF', color:'#EF476F', order:4 },
+          { label:'30% OFF', value:'30% OFF', color:'#118AB2', order:5 },
+        ];
+        defaults.forEach((d, i) => {
+          batch.set(db.collection('spinWheel').doc(`slot_${i+1}`), d);
+        });
+        await batch.commit();
+      }
+
+      // Seed admin settings
+      const settingsSnap = await db.collection('adminSettings').doc('spinControl').get();
+      if (!settingsSnap.exists) {
+        await db.collection('adminSettings').doc('spinControl').set({ forcedSlot: 0 });
+      }
+
+      // Seed cards
+      const cardsSnap = await db.collection('cardShuffle').limit(1).get();
+      if (cardsSnap.empty) {
+        const batch = db.batch();
+        const cardDefaults = [
+          { label:'Card 1', discount:'10% OFF', order:0 },
+          { label:'Card 2', discount:'20% OFF', order:1 },
+          { label:'Card 3', discount:'5% OFF',  order:2 },
+          { label:'Card 4', discount:'15% OFF', order:3 },
+          { label:'Card 5', discount:'25% OFF', order:4 },
+          { label:'Card 6', discount:'30% OFF', order:5 },
+        ];
+        cardDefaults.forEach((c, i) => {
+          batch.set(db.collection('cardShuffle').doc(`card_${i+1}`), c);
+        });
+        await batch.commit();
+      }
+
+      // Seed referral code
+      const refSnap = await db.collection('referralCodes').doc('active').get();
+      if (!refSnap.exists) {
+        await db.collection('referralCodes').doc('active').set({
+          code: 'WIFEYLUCK10',
+          discount: 10,
+          mode: 'auto',
+          expiresAt: firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 24 * 3600 * 1000))
+        });
+      }
+    }
+
+    // The seed runs the first time the admin logs in
+    // It's idempotent — does nothing if data already exists
+    function initAdmin() {
+      seedDefaults().catch(console.warn);
+      subscribeSpinWheel();
+      subscribeAdminSettings();
+      subscribeCards();
+      subscribeReferral();
+    }
+  </script>
+</body>
+</html>
